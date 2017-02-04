@@ -43,11 +43,7 @@ sub set {
     }
 
     if ($self->current_size > $self->max_size) {
-        $self->{current_size}--;
-
-        my $booby_key = $self->{cache}{ $self->{end_key} }{prev_key};
-        delete $self->{cache}{ $self->{end_key} } if defined $self->{end_key};
-        $self->{end_key} = $booby_key;
+        $self->remove($self->{end_key});
     }
 
     $self->{cache}{$key} = {
