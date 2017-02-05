@@ -11,8 +11,8 @@ sub new {
         max_size => $args{max_size} || 3,
         current_size => 0,
         cache        => {},
-        start_key    => undef,
-        end_key      => undef,
+        start        => undef,
+        end          => undef,
     }, $class;
 }
 
@@ -32,28 +32,31 @@ sub set {
     my ($self, $key, $value) = @_;
 
     if (my $current = $self->{cache}{$key}) {
-        $self->{cache}{ $current->{prev_key} }{next_key} = $current->{next_key}
-            if $current->{prev_key};
-        $self->{cache}{ $current->{next_key} }{prev_key} = $current->{prev_key} || $key
-            if $current->{next_key};
-
+        if($current->{prev} && $current->{next}) {
+            $current->{prev}{next} = $current->{next};
+            $current->{next}{prev} = $current->{prev};
+        }
+        $self->{end} = $current->{prev} if not $current->{next} && $current->{prev};
     }
     else {
         $self->{current_size}++;
     }
 
-    if ($self->current_size > $self->max_size) {
-        $self->remove($self->{end_key});
-    }
-
     $self->{cache}{$key} = {
-        prev_key => undef,
-        next_key => $self->{start_key},
-        value    => $value,
+        prev  => undef,
+        next  => undef,
+        value => $value,
+        key   => $key,
     };
 
-    $self->{start_key} = $key;
-    $self->{end_key} = $key if not defined $self->{end_key};
+    if ($self->current_size > $self->max_size) {
+        $self->remove($self->{end}{key});
+    }
+
+    $self->{cache}{$key}{next} = $self->{start}
+        if defined($self->{start}) && $self->{start}{key} ne $key;
+    $self->{start} = $self->{cache}{$key};
+    $self->{end} = $self->{cache}{$key} if not $self->{end};
 }
 
 sub get {
@@ -63,12 +66,12 @@ sub get {
 
     return if not $current;
 
-    $self->{cache}{ $current->{prev_key} }{next_key} = $current->{next_key} if $current->{prev_key};
-    $self->{cache}{ $current->{next_key} }{prev_key} = $current->{prev_key} || $key
-        if $current->{next_key};
-    $self->{start_key} = $key;
-    if ($self->{end_key} && $key eq $self->{end_key}) {
-        $self->{end_key} = $current->{prev_key};
+    $current->{prev}{next} = $current->{next} if $current->{prev};
+    $current->{next}{prev} = $current->{prev} || $current if $current->{next};
+    $self->{start} = $current;
+
+    if ($self->{end} && $key eq $self->{end}{key}) {
+        $self->{end} = $current->{prev};
     }
 
     $current->{value};
@@ -77,18 +80,17 @@ sub get {
 sub remove {
     my ($self, $key) = @_;
 
-    my $current = $self->{cache}{$key};
+    my $current = delete $self->{cache}{$key};
 
     return if not $current;
 
     $self->{current_size}--;
 
-    $self->{cache}{ $current->{prev_key} }{next_key} = $current->{next_key} if $current->{prev_key};
-    $self->{cache}{ $current->{next_key} }{prev_key} = $current->{prev_key} if $current->{next_key};
-    $self->{start_key} = $current->{next_key} if $self->{start_key} && $key eq $self->{start_key};
-    $self->{end_key}   = $current->{prev_key} if $self->{end_key}   && $key eq $self->{end_key};
+    $current->{prev}{next} = $current->{next} if $current->{prev};
+    $current->{next}{prev} = $current->{prev} if $current->{next};
 
-    delete $self->{cache}{$key};
+    $self->{start} = $current->{next} if not $current->{prev};
+    $self->{end}   = $current->{prev} if not $current->{next};
 }
 
 1;
